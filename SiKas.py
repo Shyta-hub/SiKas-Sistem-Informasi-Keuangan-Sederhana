@@ -4,7 +4,6 @@ import numpy as np
 from datetime import datetime
 import matplotlib.pyplot as plt
 
-# Fungsi untuk menghitung ringkasan tahunan
 def calculate_yearly_summary(year, transaksi):
     pemasukan = [
         entry for entry in transaksi
@@ -16,13 +15,18 @@ def calculate_yearly_summary(year, transaksi):
     ]
     return pemasukan, pengeluaran
 
-# Fungsi untuk prediksi saldo berdasarkan tren
 def predict_balance(transaksi, period_months):
-    pemasukan_total = sum(entry['jumlah'] for entry in transaksi if entry['kategori'] == 'Pendapatan')
-    pengeluaran_total = sum(entry['jumlah'] for entry in transaksi if entry['kategori'] == 'Pengeluaran')
+    transaksi_df = pd.DataFrame(transaksi)
+    
+    transaksi_df['jumlah'] = pd.to_numeric(transaksi_df['jumlah'], errors='coerce')
+    
+    transaksi_df = transaksi_df.dropna(subset=['jumlah'])
 
-    pemasukan_avg = pemasukan_total / 12
-    pengeluaran_avg = pengeluaran_total / 12
+    pemasukan_total = transaksi_df[transaksi_df['kategori'] == 'Pendapatan']['jumlah'].sum()
+    pengeluaran_total = transaksi_df[transaksi_df['kategori'] == 'Pengeluaran']['jumlah'].sum()
+
+    pemasukan_avg = pemasukan_total / 12 if pemasukan_total > 0 else 0
+    pengeluaran_avg = pengeluaran_total / 12 if pengeluaran_total > 0 else 0
 
     current_balance = pemasukan_total - pengeluaran_total
     prediksi_saldo = [current_balance + (pemasukan_avg - pengeluaran_avg) * (i + 1) for i in range(period_months)]
@@ -31,7 +35,6 @@ def predict_balance(transaksi, period_months):
 
     return prediksi_saldo, pemasukan_prediksi, pengeluaran_prediksi, pemasukan_avg, pengeluaran_avg
 
-# Autentikasi login
 users = {
     "admin": "admin123",
     "user": "user123",
@@ -56,7 +59,6 @@ else:
     menu = ["Dashboard", "Transaksi", "Laporan", "Prediksi Saldo", "Logout"]
     choice = st.sidebar.selectbox("Pilih Menu", menu)
 
-    # Load data transaksi
     try:
         transaksi = pd.read_csv("data/transaksi.csv")
         transaksi['tanggal'] = pd.to_datetime(transaksi['tanggal'])
@@ -64,59 +66,56 @@ else:
         st.error(f"Gagal memuat data transaksi: {e}")
         transaksi = []
 
-    # Halaman Dashboard
     if choice == "Dashboard":
         st.title("Dashboard SiKas")
         st.write("Selamat datang di SiKas - Sistem Informasi Keuangan Sederhana.")
         st.write("Aplikasi ini membantu untuk mengelola dan memantau transaksi keuangan Anda.")
 
-    # Halaman Transaksi
     elif choice == "Transaksi":
-        st.title("Manajemen Transaksi Kas")
-        st.write("Masukkan transaksi keuangan.")
+        st.title("Input Transaksi Kas")
+        st.write("Silahkan masukkan transaksi keuangan Anda.")
         
-        # Input data transaksi
         tanggal = st.date_input("Tanggal Transaksi")
         kategori = st.selectbox("Kategori Transaksi", ["Pendapatan", "Pengeluaran"])
         jumlah = st.number_input("Jumlah Uang", min_value=0.0, format="%.2f")
         deskripsi = st.text_input("Deskripsi Transaksi")
-        
-        # Tombol untuk menambah transaksi
+        metode_pembayaran = st.selectbox("Metode Pembayaran", ["Tunai", "Transfer", "Kartu Kredit", "Debit", "E-Wallet"])
+
         if st.button("Tambah Transaksi"):
             new_data = pd.DataFrame({
                 'tanggal': [tanggal],
-                'kategori': [kategori],
                 'jumlah': [jumlah],
-                'deskripsi': [deskripsi]
+                'kategori': [kategori],
+                'deskripsi': [deskripsi],
+                'metode_pembayaran': [metode_pembayaran]
             })
             new_data.to_csv("data/transaksi.csv", mode='a', header=False, index=False)
-            st.success(f"Transaksi berhasil ditambahkan: {deskripsi} - {jumlah} IDR")
+            st.success(f"Transaksi berhasil ditambahkan: {deskripsi} - {jumlah} IDR dengan metode pembayaran {metode_pembayaran}")
 
-    # Halaman Laporan
     elif choice == "Laporan":
         st.title("Laporan Keuangan")
         st.write("Menampilkan laporan transaksi keuangan.")
         
-        # Filter data berdasarkan tanggal
         start_date = st.date_input("Dari Tanggal", min_value=pd.to_datetime(transaksi['tanggal'].min()))
         end_date = st.date_input("Sampai Tanggal", max_value=pd.to_datetime(transaksi['tanggal'].max()))
         
-        filtered_data = transaksi[(transaksi['tanggal'] >= pd.to_datetime(start_date)) &
+        filtered_data = transaksi[(transaksi['tanggal'] >= pd.to_datetime(start_date)) & 
                                   (transaksi['tanggal'] <= pd.to_datetime(end_date))]
         st.write(filtered_data)
 
-        # Visualisasi laporan pendapatan dan pengeluaran
         grouped_data = filtered_data.groupby('kategori')['jumlah'].sum().reset_index()
+
+        grouped_data['jumlah'] = pd.to_numeric(grouped_data['jumlah'], errors='coerce')
+
         st.bar_chart(grouped_data.set_index('kategori')['jumlah'])
 
-        # Menampilkan total pendapatan dan pengeluaran
-        total_income = grouped_data[grouped_data['kategori'] == 'Pendapatan']['jumlah'].sum()
-        total_expense = grouped_data[grouped_data['kategori'] == 'Pengeluaran']['jumlah'].sum()
-        st.write(f"Total Pendapatan: {total_income} IDR")
-        st.write(f"Total Pengeluaran: {total_expense} IDR")
-        st.write(f"Sisa Kas: {total_income - total_expense} IDR")
+        total_income = pd.to_numeric(grouped_data[grouped_data['kategori'] == 'Pendapatan']['jumlah'].sum(), errors='coerce')
+        total_expense = pd.to_numeric(grouped_data[grouped_data['kategori'] == 'Pengeluaran']['jumlah'].sum(), errors='coerce')
 
-    # Halaman Prediksi Saldo
+        st.write(f"Total Pendapatan: {total_income:,.2f} IDR")
+        st.write(f"Total Pengeluaran: {total_expense:,.2f} IDR")
+        st.write(f"Sisa Kas: {total_income - total_expense:,.2f} IDR")
+
     elif choice == "Prediksi Saldo":
         st.title("Prediksi Saldo")
         period_months = st.slider("Periode Proyeksi (bulan)", min_value=1, max_value=24, value=12)
@@ -138,10 +137,9 @@ else:
         st.write(f"Rata-rata pemasukan per bulan: Rp {pemasukan_avg:,.2f}")
         st.write(f"Rata-rata pengeluaran per bulan: Rp {pengeluaran_avg:,.2f}")
 
-    # Halaman Logout
     elif choice == "Logout":
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.session_state['authenticated'] = False
         st.success("Logout berhasil")
-        st.experimental_rerun()
+        st.rerun()
